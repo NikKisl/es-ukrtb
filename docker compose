@@ -1,0 +1,164 @@
+version: "3.7"
+
+services:
+  caddy:
+    image: iarekylew00t/caddy-cloudflare:latest
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./config/caddy:/etc/caddy
+      - ./data/caddy/www:/srv/www
+      - ./data/caddy:/data
+      - ./config/caddy:/config
+
+  postgres-gitea:
+    image: postgres:14
+    restart: always
+    volumes:
+      - ./data/postgres-gitea:/bitnami/postgresql
+    environment:
+      - POSTGRES_DB=gitea
+      - POSTGRES_USER=gitea
+      - POSTGRES_PASSWORD=gitea
+  gitea:
+    image: gitea/gitea:latest
+    restart: always
+    volumes:
+      - ./data/gitea:/data
+    environment:
+      - GITEA__database__DB_TYPE=postgres
+      - GITEA__database__HOST=postgres-gitea:5432
+      - GITEA__database__NAME=gitea
+      - GITEA__database__USER=gitea
+      - GITEA__database__PASSWD=gitea
+    expose:
+      - 3000
+      - 2222
+
+  node-nextcloud:
+    image: nextcloud:apache
+    environment:
+      - POSTGRES_HOST=postgres-nextcloud
+      - POSTGRES_PASSWORD=nextcloud
+      - POSTGRES_DB=nextcloud
+      - POSTGRES_USER=nextcloud
+    expose:
+      - 80
+    restart: always
+    volumes:
+      - ./data/nextcloud:/var/www/html
+  postgres-nextcloud:
+    image: postgres:alpine
+    environment:
+      - POSTGRES_PASSWORD=nextcloud
+      - POSTGRES_DB=nextcloud
+      - POSTGRES_USER=nextcloud
+    restart: always
+    volumes:
+      - ./data/postgres-nextcloud:/var/lib/postgresql/data
+    expose:
+      - 5432
+
+  mail:
+    container_name: mail
+    ports:
+      - 25:25
+      - 110:110
+      - 143:143
+      - 465:465
+      - 587:587
+      - 993:993
+      - 995:995
+    environment:
+      - TZ=Asia/Yekaterinburg
+      - HTTPS=off
+    expose:
+      - 80
+    volumes:
+      - ./data/mail:/data
+    tty: true
+    image: analogic/poste.io
+
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    volumes:
+      - ./config/prometheus:/etc/prometheus
+      - ./data/prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    expose:
+      - 9090
+
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    volumes:
+      - ./data/grafana:/var/lib/grafana
+      - ./config/grafana:/etc/grafana/provisioning
+    environment:
+      - GF_SECURITY_ADMIN_USER=${ADMIN_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    restart: unless-stopped
+    expose:
+      - 4000
+  exporter:
+    image: prom/node-exporter
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    container_name: exporter
+    hostname: exporter
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --collector.filesystem.ignored-mount-points
+      - ^/(sys|proc|dev|host|etc|rootfs/var/lib/docker/containers|rootfs/var/lib/docker/overlay2|rootfs/run/docker/netns|rootfs/var/lib/docker/aufs)($$|/)
+    expose:
+      - 9100
+    restart: unless-stopped
+
+  alertmanager-bot:
+    command:
+      - --alertmanager.url=http://alertmanager:9093
+      - --log.level=info
+      - --store=bolt
+      - --bolt.path=/data/bot.db
+      - --telegram.admin=?????????
+      - --telegram.token=?????????
+    image: metalmatze/alertmanager-bot
+    user: root
+    expose:
+      - 8080
+    container_name: alertmanager-bot
+    hostname: alertmanager-bot
+    restart: unless-stopped
+    volumes:
+      - ./data/alertmanager:/data
+
+  alertmanager:
+    image: prom/alertmanager
+    user: root
+    expose:
+      - 9093
+    volumes:
+      - ./config/alertmanager/:/etc/alertmanager/
+    container_name: alertmanager
+    hostname: alertmanager
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/alertmanager/config.yml'
+      - '--storage.path=/etc/alertmanager/data'
