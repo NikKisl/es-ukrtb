@@ -1,5 +1,5 @@
 {
-        acme_dns cloudflare d7fWGzIMmzGfgGddSSzG8OtjpCTFLy4YcQS88-Co
+        acme_dns cloudflare ...
 }
 
 *.es-ukrtb.ru, es-ukrtb.ru {
@@ -35,13 +35,6 @@
                 respond "{{.RemoteIP}}"
         }
 
-#        @pf {
-#                host pf.es.ukrtb.ru
-#                remote_ip 192.168.0.0/16 10.0.0.0/8 127.0.0.0/8 172.16.0.0/12
-#        }
-#        handle @pf {
-#                reverse_proxy 172.16.0.1:8080
-#        }
          @prometheus host prometheus.es-ukrtb.ru
          handle @prometheus {
                  reverse_proxy prometheus:9090
